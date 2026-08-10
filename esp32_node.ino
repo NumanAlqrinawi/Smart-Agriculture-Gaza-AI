@@ -6,8 +6,7 @@
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 
-// Replace this URL after deploying the Flask server on Render.
-const char* serverUrl = "https://YOUR-RENDER-SERVICE.onrender.com/api/esp32";
+const char* serverUrl = "https://smart-agriculture-gaza-ai.onrender.com/api/esp32";
 
 #define RELAY_PIN 12
 #define SOIL_PIN 34
@@ -37,14 +36,11 @@ void loop() {
         http.begin(secureClient, serverUrl);
         http.addHeader("Content-Type", "application/json");
 
-        // Replace these two values with real sensor readings when available.
         float temperature = 29.5;
         float pressure = 9984.5;
         int rawSoilReading = analogRead(SOIL_PIN);
 
-        // The trained dataset uses a soil-moisture range close to 0..480,
-        // while the ESP32 ADC returns 0..4095. Adjust these calibration
-        // endpoints after measuring the real sensor in wet and dry soil.
+      
         float soilMoisture = map(rawSoilReading, 0, 4095, 0, 480);
 
         String payload = "{\"temp\":" + String(temperature)
