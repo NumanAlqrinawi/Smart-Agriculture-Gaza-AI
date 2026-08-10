@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Agriculture Gaza AI</title>
+    <style>
+        :root {
+            --green: #19764a;
+            --green-dark: #105436;
+            --page: #eef5f0;
+            --text: #173228;
+            --muted: #65756e;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 30px 16px;
+            font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+            color: var(--text);
+            background: linear-gradient(145deg, #e7f4eb, #f7faf8 55%, #e8f0ea);
+        }
+
+        .container {
+            width: min(820px, 100%);
+            margin: auto;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid #dbe8df;
+            border-radius: 20px;
+            box-shadow: 0 18px 50px rgba(25, 80, 52, 0.13);
+        }
+
+        h1 { margin: 0 0 8px; text-align: center; font-size: clamp(25px, 4vw, 36px); }
+        .subtitle { margin: 0 0 26px; text-align: center; color: var(--muted); }
+
+        .server-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 22px;
+            padding: 14px;
+            background: #f4f8f5;
+            border-radius: 12px;
+        }
+
+        .server-row .field { flex: 1; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 15px;
+        }
+
+        .zones { margin-top: 16px; }
+
+        label { display: block; margin-bottom: 7px; font-weight: 650; }
+
+        input {
+            width: 100%;
+            padding: 12px 13px;
+            font: inherit;
+            border: 1px solid #cbd9d0;
+            border-radius: 9px;
+            outline: none;
+            background: white;
+        }
+
+        input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(25, 118, 74, 0.12); }
+
+        button {
+            padding: 12px 18px;
+            font: inherit;
+            font-weight: 700;
+            color: white;
+            background: var(--green);
+            border: 0;
+            border-radius: 9px;
+            cursor: pointer;
+        }
+
+        button:hover { background: var(--green-dark); }
+        button:disabled { opacity: 0.6; cursor: wait; }
+
+        .analyze { width: 100%; margin-top: 22px; font-size: 17px; }
+
+        #serverStatus { margin-top: 8px; font-size: 14px; color: var(--muted); }
+        #message { display: none; margin-top: 18px; padding: 12px; border-radius: 9px; }
+        #message.error { display: block; color: #842029; background: #f8d7da; }
+
+        #output { display: none; margin-top: 24px; }
+        #output h2 { margin-bottom: 12px; font-size: 21px; }
+
+        .zone-box {
+            margin-top: 10px;
+            padding: 14px 16px;
+            border-radius: 10px;
+            line-height: 1.8;
+            border-right: 6px solid;
+        }
+
+        .very-dry { color: #721c24; background: #f8d7da; border-color: #dc3545; }
+        .dry { color: #765800; background: #fff3cd; border-color: #ffc107; }
+        .wet { color: #0c5460; background: #d1ecf1; border-color: #17a2b8; }
+        .very-wet { color: #155724; background: #d4edda; border-color: #28a745; }
+
+        @media (max-width: 620px) {
+            .container { padding: 22px 17px; }
+            .grid { grid-template-columns: 1fr; }
+            .server-row { display: block; }
+            .server-row button { width: 100%; margin-top: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <h1>🌾 Smart Agriculture Gaza AI</h1>
+        <p class="subtitle">تحليل قراءات التربة واتخاذ قرار الري باستخدام نموذج ذكاء اصطناعي</p>
+
+        <section class="server-row">
+            <div class="field">
+                <label for="apiUrl">رابط سيرفر الذكاء الاصطناعي</label>
+                <input id="apiUrl" type="url" aria-label="رابط السيرفر">
+                <div id="serverStatus">جارٍ فحص الاتصال...</div>
+            </div>
+            <button type="button" onclick="checkServer()">فحص الاتصال</button>
+        </section>
+
+        <section class="grid">
+            <div>
+                <label for="temp">🌡️ درجة الحرارة (°C)</label>
+                <input type="number" id="temp" value="29.1" step="0.01">
+            </div>
+            <div>
+                <label for="pressure">⏲️ قراءة الضغط</label>
+                <input type="number" id="pressure" value="9984.5" step="0.01">
+            </div>
+        </section>
+
+        <section class="grid zones">
+            <div>
+                <label for="soil1">💧 رطوبة التربة — القطاع الأول</label>
+                <input type="number" id="soil1" value="377">
+            </div>
+            <div>
+                <label for="soil2">💧 رطوبة التربة — القطاع الثاني</label>
+                <input type="number" id="soil2" value="240">
+            </div>
+            <div>
+                <label for="soil3">💧 رطوبة التربة — القطاع الثالث</label>
+                <input type="number" id="soil3" value="150">
+            </div>
+        </section>
+
+        <button id="analyzeButton" class="analyze" type="button" onclick="analyzeData()">
+            🧠 إرسال القراءات وتحليلها
+        </button>
+
+        <div id="message"></div>
+
+        <section id="output">
+            <h2>📊 قرارات الذكاء الاصطناعي</h2>
+            <div id="results"></div>
+        </section>
+    </main>
+
+    <script>
+        const apiInput = document.getElementById("apiUrl");
+        const localApi = "http://127.0.0.1:5000";
+        const pageIsServedByFlask = ["127.0.0.1", "localhost"].includes(location.hostname)
+            && location.port === "5000";
+        apiInput.value = pageIsServedByFlask ? location.origin : localApi;
+
+        function apiBase() {
+            return apiInput.value.trim().replace(/\/$/, "");
+        }
+
+        async function checkServer() {
+            const status = document.getElementById("serverStatus");
+            status.textContent = "جارٍ فحص الاتصال...";
+            try {
+                const response = await fetch(`${apiBase()}/health`);
+                if (!response.ok) throw new Error("Server is not ready");
+                const data = await response.json();
+                status.textContent = `✅ متصل — ${data.model}`;
+                status.style.color = "#19764a";
+            } catch (error) {
+                status.textContent = "❌ لا يوجد اتصال بالسيرفر";
+                status.style.color = "#a1262f";
+            }
+        }
+
+        async function analyzeData() {
+            const button = document.getElementById("analyzeButton");
+            const message = document.getElementById("message");
+            const output = document.getElementById("output");
+            const resultsContainer = document.getElementById("results");
+
+            message.className = "";
+            message.style.display = "none";
+            button.disabled = true;
+            button.textContent = "جارٍ التحليل...";
+
+            const payload = {
+                temp: Number(document.getElementById("temp").value),
+                pressure: Number(document.getElementById("pressure").value),
+                moistures: [
+                    Number(document.getElementById("soil1").value),
+                    Number(document.getElementById("soil2").value),
+                    Number(document.getElementById("soil3").value)
+                ]
+            };
+
+            try {
+                const response = await fetch(`${apiBase()}/predict_web`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || "فشل تحليل البيانات");
+                }
+
+                resultsContainer.innerHTML = "";
+                data.results.forEach((result) => {
+                    const card = document.createElement("div");
+                    card.className = `zone-box ${result.css_class}`;
+                    card.innerHTML = `
+                        <strong>القطاع ${result.zone}: ${result.status_ar}</strong><br>
+                        التصنيف: ${result.class}<br>
+                        القرار: ${result.action_ar}
+                    `;
+                    resultsContainer.appendChild(card);
+                });
+                output.style.display = "block";
+            } catch (error) {
+                output.style.display = "none";
+                message.textContent = `⚠️ ${error.message}`;
+                message.className = "error";
+            } finally {
+                button.disabled = false;
+                button.textContent = "🧠 إرسال القراءات وتحليلها";
+            }
+        }
+
+        checkServer();
+    </script>
+</body>
+</html>

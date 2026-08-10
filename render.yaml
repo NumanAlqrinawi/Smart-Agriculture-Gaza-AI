@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: smart-agriculture-gaza-ai
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python train_model.py
+    startCommand: gunicorn app:app
+    healthCheckPath: /health
