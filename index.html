@@ -169,7 +169,7 @@
 
     <script>
         const apiInput = document.getElementById("apiUrl");
-        const localApi = "http://127.0.0.1:5000";
+        const localApi = "https://smart-agriculture-gaza-ai.onrender.com";
         const pageIsServedByFlask = ["127.0.0.1", "localhost"].includes(location.hostname)
             && location.port === "5000";
         apiInput.value = pageIsServedByFlask ? location.origin : localApi;
