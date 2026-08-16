@@ -3,5 +3,5 @@ services:
     name: smart-agriculture-gaza-ai
     runtime: python
     buildCommand: pip install -r requirements.txt && python train_model.py
-    startCommand: gunicorn app:app
+    startCommand: gunicorn --workers 1 --threads 2 --timeout 120 app:app
     healthCheckPath: /health

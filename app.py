@@ -1,4 +1,5 @@
 from pathlib import Path
+from io import BytesIO
 import math
 import os
 
@@ -6,11 +7,15 @@ import joblib
 import pandas as pd
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from PIL import Image, UnidentifiedImageError
+
+from weed_detector import CLASS_NAMES, WeedDetector, WeedModelUnavailable
 
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_FILE = BASE_DIR / "real_data_nn_model.pkl"
 SCALER_FILE = BASE_DIR / "real_data_scaler.pkl"
+WEED_MODEL_FILE = BASE_DIR / "weed_detector.onnx"
 FEATURES = ["temperature", "pressure", "soil_moisture"]
 
 CLASS_DETAILS = {
@@ -46,8 +51,10 @@ if not MODEL_FILE.exists() or not SCALER_FILE.exists():
 
 model = joblib.load(MODEL_FILE)
 scaler = joblib.load(SCALER_FILE)
+weed_detector = WeedDetector(WEED_MODEL_FILE)
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
 CORS(app)
 
 
@@ -97,6 +104,11 @@ def health():
             "service": "Smart Agriculture Gaza AI",
             "model": "MLPClassifier",
             "classes": list(CLASS_DETAILS.keys()),
+            "weed_detector": {
+                "model": "YOLO11n ONNX",
+                "available": weed_detector.available,
+                "classes": list(CLASS_NAMES.values()),
+            },
         }
     )
 
@@ -153,6 +165,53 @@ def esp32_telemetry():
         )
     except (TypeError, ValueError) as error:
         return jsonify({"success": False, "error": str(error)}), 400
+
+
+@app.post("/predict_weed")
+def predict_weed():
+    try:
+        image_file = request.files.get("image")
+        if image_file is None or not image_file.filename:
+            raise ValueError("Please select an image")
+
+        confidence = float(request.form.get("confidence", "0.35"))
+        if not 0.1 <= confidence <= 0.9:
+            raise ValueError("Confidence must be between 0.1 and 0.9")
+
+        image_bytes = image_file.read()
+        if not image_bytes:
+            raise ValueError("The uploaded image is empty")
+
+        image = Image.open(BytesIO(image_bytes))
+        if image.width * image.height > 16_000_000:
+            raise ValueError("Image resolution is too large")
+        image.load()
+        image = image.convert("RGB")
+
+        result = weed_detector.predict(image, confidence)
+        result["success"] = True
+        result["model"] = "YOLO11n"
+        return jsonify(result)
+    except WeedModelUnavailable as error:
+        return jsonify({"success": False, "error": str(error)}), 503
+    except (
+        TypeError,
+        ValueError,
+        UnidentifiedImageError,
+        Image.DecompressionBombError,
+        OSError,
+    ) as error:
+        return jsonify({"success": False, "error": str(error)}), 400
+    except Exception:
+        app.logger.exception("Weed image analysis failed")
+        return jsonify(
+            {"success": False, "error": "The image could not be analyzed"}
+        ), 500
+
+
+@app.errorhandler(413)
+def image_too_large(_error):
+    return jsonify({"success": False, "error": "Image must be smaller than 6 MB"}), 413
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@
         }
 
         .container {
-            width: min(820px, 100%);
+            width: min(960px, 100%);
             margin: auto;
             padding: 30px;
             background: rgba(255, 255, 255, 0.96);
@@ -91,6 +91,70 @@
         #message { display: none; margin-top: 18px; padding: 12px; border-radius: 9px; }
         #message.error { display: block; color: #842029; background: #f8d7da; }
 
+        .feature-section {
+            margin-top: 30px;
+            padding-top: 26px;
+            border-top: 1px solid #dbe8df;
+        }
+
+        .feature-section h2 { margin: 0 0 8px; font-size: 23px; }
+        .feature-description { margin: 0 0 18px; color: var(--muted); line-height: 1.8; }
+
+        .upload-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .upload-row button { min-width: 170px; }
+
+        #visionMessage { display: none; margin-top: 15px; padding: 12px; border-radius: 9px; }
+        #visionMessage.error { display: block; color: #842029; background: #f8d7da; }
+        #visionOutput { display: none; margin-top: 20px; }
+
+        .vision-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .summary-badge {
+            padding: 9px 13px;
+            font-weight: 700;
+            border-radius: 999px;
+        }
+
+        .crop-badge { color: #155724; background: #d4edda; }
+        .weed-badge { color: #842029; background: #f8d7da; }
+
+        .canvas-wrap {
+            overflow: hidden;
+            padding: 8px;
+            background: #f4f8f5;
+            border: 1px solid #dbe8df;
+            border-radius: 12px;
+        }
+
+        #weedCanvas { display: block; width: 100%; height: auto; border-radius: 7px; }
+
+        .detection-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .detection-item {
+            padding: 10px 12px;
+            background: #f4f8f5;
+            border-radius: 8px;
+        }
+
+        .data-source { margin: 13px 0 0; font-size: 13px; color: var(--muted); }
+        .data-source a { color: var(--green); }
+
         #output { display: none; margin-top: 24px; }
         #output h2 { margin-bottom: 12px; font-size: 21px; }
 
@@ -112,6 +176,9 @@
             .grid { grid-template-columns: 1fr; }
             .server-row { display: block; }
             .server-row button { width: 100%; margin-top: 10px; }
+            .upload-row { grid-template-columns: 1fr; }
+            .upload-row button { width: 100%; }
+            .detection-list { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -165,6 +232,42 @@
             <h2>📊 قرارات الذكاء الاصطناعي</h2>
             <div id="results"></div>
         </section>
+
+        <section class="feature-section">
+            <h2>🌿 كشف المحاصيل والأعشاب من الصور</h2>
+            <p class="feature-description">
+                ارفع صورة من الحقل ليحدد نموذج YOLO أماكن المحاصيل والأعشاب داخلها
+                باستخدام مربعات ونسب ثقة.
+            </p>
+
+            <div class="upload-row">
+                <div>
+                    <label for="weedImage">اختر صورة بصيغة JPG أو PNG أو WEBP</label>
+                    <input id="weedImage" type="file" accept="image/jpeg,image/png,image/webp">
+                </div>
+                <button id="weedButton" type="button" onclick="analyzeWeedImage()">
+                    🔍 تحليل الصورة
+                </button>
+            </div>
+
+            <div id="visionMessage"></div>
+
+            <div id="visionOutput">
+                <div id="visionSummary" class="vision-summary"></div>
+                <div class="canvas-wrap">
+                    <canvas id="weedCanvas"></canvas>
+                </div>
+                <div id="detectionList" class="detection-list"></div>
+            </div>
+
+            <p class="data-source">
+                مصدر بيانات الصور:
+                <a href="https://www.kaggle.com/datasets/ravirajsinh45/crop-and-weed-detection-data-with-bounding-boxes"
+                   target="_blank" rel="noopener noreferrer">
+                    Crop and Weed Detection Data with Bounding Boxes
+                </a>
+            </p>
+        </section>
     </main>
 
     <script>
@@ -185,7 +288,8 @@
                 const response = await fetch(`${apiBase()}/health`);
                 if (!response.ok) throw new Error("Server is not ready");
                 const data = await response.json();
-                status.textContent = `✅ متصل — ${data.model}`;
+                const visionStatus = data.weed_detector?.available ? "YOLO جاهز" : "YOLO غير متاح";
+                status.textContent = `✅ متصل — ${data.model} — ${visionStatus}`;
                 status.style.color = "#19764a";
             } catch (error) {
                 status.textContent = "❌ لا يوجد اتصال بالسيرفر";
@@ -245,6 +349,125 @@
             } finally {
                 button.disabled = false;
                 button.textContent = "🧠 إرسال القراءات وتحليلها";
+            }
+        }
+
+        function loadBrowserImage(url) {
+            return new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = () => reject(new Error("تعذر فتح الصورة المختارة"));
+                image.src = url;
+            });
+        }
+
+        function drawDetections(image, data) {
+            const canvas = document.getElementById("weedCanvas");
+            const context = canvas.getContext("2d");
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+            const scaleX = canvas.width / data.image_width;
+            const scaleY = canvas.height / data.image_height;
+            const lineWidth = Math.max(2, canvas.width / 280);
+            const fontSize = Math.max(14, canvas.width / 35);
+
+            context.lineWidth = lineWidth;
+            context.font = `bold ${fontSize}px Arial`;
+            context.textBaseline = "top";
+            context.direction = "ltr";
+
+            data.detections.forEach((detection) => {
+                const box = detection.box;
+                const x = box.x1 * scaleX;
+                const y = box.y1 * scaleY;
+                const width = (box.x2 - box.x1) * scaleX;
+                const height = (box.y2 - box.y1) * scaleY;
+                const color = detection.class_name === "weed" ? "#dc3545" : "#198754";
+                const label = `${detection.class_name} ${(detection.confidence * 100).toFixed(1)}%`;
+
+                context.strokeStyle = color;
+                context.strokeRect(x, y, width, height);
+
+                const textWidth = context.measureText(label).width;
+                const labelHeight = fontSize + 8;
+                const labelY = Math.max(0, y - labelHeight);
+                context.fillStyle = color;
+                context.fillRect(x, labelY, textWidth + 12, labelHeight);
+                context.fillStyle = "white";
+                context.fillText(label, x + 6, labelY + 4);
+            });
+        }
+
+        async function analyzeWeedImage() {
+            const input = document.getElementById("weedImage");
+            const button = document.getElementById("weedButton");
+            const message = document.getElementById("visionMessage");
+            const output = document.getElementById("visionOutput");
+            const summary = document.getElementById("visionSummary");
+            const detectionList = document.getElementById("detectionList");
+            const file = input.files[0];
+
+            message.className = "";
+            message.style.display = "none";
+            output.style.display = "none";
+
+            if (!file) {
+                message.textContent = "⚠️ اختر صورة أولًا";
+                message.className = "error";
+                return;
+            }
+            if (file.size > 6 * 1024 * 1024) {
+                message.textContent = "⚠️ يجب أن يكون حجم الصورة أقل من 6 MB";
+                message.className = "error";
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = "جارٍ تحليل الصورة...";
+            const imageUrl = URL.createObjectURL(file);
+
+            try {
+                const browserImage = await loadBrowserImage(imageUrl);
+                const formData = new FormData();
+                formData.append("image", file);
+
+                const response = await fetch(`${apiBase()}/predict_weed`, {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || "فشل تحليل الصورة");
+                }
+
+                drawDetections(browserImage, data);
+                summary.innerHTML = `
+                    <span class="summary-badge crop-badge">المحاصيل المكتشفة: ${data.crop_count}</span>
+                    <span class="summary-badge weed-badge">الأعشاب المكتشفة: ${data.weed_count}</span>
+                `;
+
+                detectionList.innerHTML = "";
+                if (data.detections.length === 0) {
+                    detectionList.innerHTML = '<div class="detection-item">لم يكتشف النموذج محصولًا أو عشبة بثقة كافية.</div>';
+                } else {
+                    data.detections.forEach((detection, index) => {
+                        const item = document.createElement("div");
+                        item.className = "detection-item";
+                        item.textContent = `${index + 1}. ${detection.class_name_ar} — ثقة ${(detection.confidence * 100).toFixed(1)}%`;
+                        detectionList.appendChild(item);
+                    });
+                }
+                output.style.display = "block";
+            } catch (error) {
+                message.textContent = `⚠️ ${error.message}`;
+                message.className = "error";
+            } finally {
+                URL.revokeObjectURL(imageUrl);
+                button.disabled = false;
+                button.textContent = "🔍 تحليل الصورة";
             }
         }
 
